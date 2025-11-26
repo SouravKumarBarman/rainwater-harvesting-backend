@@ -5,7 +5,12 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "black>=25.11.0",
     "fastapi[standard]>=0.121.1",
+    "httpx>=0.28.1",
+    "pwdlib[argon2]>=0.3.0",
+    "pydantic-settings>=2.12.0",
+    "pyjwt>=2.10.1",
     "pymongo>=4.15.4",
     "python-dotenv>=1.2.1",
 ]
