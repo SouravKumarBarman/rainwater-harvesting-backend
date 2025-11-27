@@ -1,5 +1,6 @@
 from pymongo import AsyncMongoClient
 from ..config import settings
+
 client = None
 db = None
 
@@ -35,3 +36,12 @@ async def get_user_collection():
         if not connected or db is None:
             raise RuntimeError("Database is not connected")
     return db.get_collection("users")
+
+async def get_project_collection():
+    global db
+    if db is None:
+        # try to establish a connection if not already connected
+        connected = await connect_db()
+        if not connected or db is None:
+            raise RuntimeError("Database is not connected")
+    return db.get_collection("projects")
