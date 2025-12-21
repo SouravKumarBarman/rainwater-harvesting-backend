@@ -1,6 +1,7 @@
 from functools import lru_cache
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from .api.v1 import auth, rainfall, project_routes
 from .db import dbConnect
 from . import config
@@ -15,6 +16,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Rainwater Harvesting API", version="1.0.0", lifespan=lifespan)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Change "*" to specific domains in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @lru_cache
 def get_settings():
