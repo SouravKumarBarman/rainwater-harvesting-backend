@@ -42,6 +42,16 @@ MONGODB_URL=mongodb://localhost:27017
 # Optional: weather API key used by rainfall services
 WEATHER_API_KEY=your_weather_api_key_here
 
+# JWT secrets; use long random values in production
+JWT_SECRET_KEY=replace_with_a_long_random_secret
+JWT_REFRESH_SECRET_KEY=replace_with_a_different_long_random_secret
+COOKIE_SECURE=false
+
+# Live product pricing via SerpApi Google Shopping
+SERPAPI_API_KEY=your_serpapi_key_here
+SHOPPING_COUNTRY=in
+SHOPPING_LANGUAGE=en
+
 # Port the server should run on (default in settings: 8000)
 PORT=8000
 ```
@@ -50,6 +60,12 @@ Note: The keys above correspond to the Pydantic settings fields:
 - `mongodb_url`
 - `weather_api_key`
 - `port`
+- `jwt_secret_key`
+- `jwt_refresh_secret_key`
+- `cookie_secure`
+- `serpapi_api_key`
+- `shopping_country`
+- `shopping_language`
 
 **Run (Development)**
 
@@ -86,11 +102,17 @@ If the string is not a valid ObjectId, handle `bson.errors.InvalidId` and return
 - `app/services` — Business logic and helpers (e.g., `user_services.py`, `rainfallService.py`)
 - `app/db/dbConnect.py` — MongoDB connection utilities
 
+**Live cost estimation and products**
+
+`POST /api/v1/projects/calculate` now returns a `result.cost_estimate` object and a `result.products` list. When `SERPAPI_API_KEY` is configured, the backend searches Google Shopping through SerpApi for required rainwater harvesting components such as filters, first-flush kits, gutters, tanks, and recharge materials. The selected live offers are used to compute `estimated_cost`, and the product list includes title, seller, price, link, thumbnail, rating, reviews, and category so the frontend can render product cards directly.
+
+If `SERPAPI_API_KEY` is missing or a live product request fails, the API returns notes inside `cost_estimate.notes` instead of silently using fake hardcoded prices.
+
 **Notes and troubleshooting**
 
 - If you see a circular import error involving `oauth2_scheme`, it may be because a router imports something that imports `app.main`. The project places `oauth2_scheme` in `app/utils/authUtils.py` to avoid that. Keep auth helpers in a separate module.
 - Ensure MongoDB is running and reachable at the `MONGODB_URL` you provide.
-- If you get dependency issues, run `uv sync` again and check your Python version (the project lists `requires-python = ">=3.14"` in `pyproject.toml`).
+- If you get dependency issues, run `uv sync` again and check your Python version (the project lists `requires-python = ">=3.11,<3.14"` in `pyproject.toml`).
 
 **Next steps / Suggestions**
 

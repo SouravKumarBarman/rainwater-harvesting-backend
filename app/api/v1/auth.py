@@ -1,9 +1,12 @@
+from bson import ObjectId
 from fastapi import APIRouter, Body, status, Cookie
 from fastapi.exceptions import HTTPException
 from app.models.userModel import registerUserModel, userOut, UserInDB
+from app.config import settings
 from app.db.dbConnect import get_user_collection
 from app.utils.authUtils import (
     hash_password,
+    hash_token,
     verify_password,
     create_access_token,
     create_refresh_token,
@@ -11,11 +14,17 @@ from app.utils.authUtils import (
 )
 from fastapi.responses import JSONResponse
 from typing import Annotated
-from fastapi.security import  OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi import Depends
 from ...services.user_services import get_current_user
 
 router = APIRouter()
+
+
+def _user_object_id(user_id: str) -> ObjectId:
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+    return ObjectId(user_id)
 
 
 ############################ Register User ############################
@@ -36,14 +45,12 @@ async def register_user(payload: registerUserModel = Body(...)):
 
     #  Prepare the document for insertion using the UserInDB structure
     user_db_data = UserInDB(
-        email=payload.email,
-        username=payload.username,
-        hashed_password=payload.password
+        email=payload.email, username=payload.username, hashed_password=payload.password
     )
     user_dict = user_db_data.model_dump(by_alias=True, exclude={"id"})
 
     # Create a new user
-    insert_result=await user_collection.insert_one(user_dict)
+    insert_result = await user_collection.insert_one(user_dict)
     new_user_doc = await user_collection.find_one({"_id": insert_result.inserted_id})
     return userOut.model_validate(new_user_doc)
 
@@ -62,11 +69,13 @@ async def login_user(logindata: Annotated[OAuth2PasswordRequestForm, Depends()])
     user = await user_collection.find_one({"email": logindata.username})
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
         )
     if not verify_password(logindata.password, user["hashed_password"]):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
         )
     # return jwt token or session info here in real application
     user_id_str = str(user["_id"])
@@ -74,12 +83,22 @@ async def login_user(logindata: Annotated[OAuth2PasswordRequestForm, Depends()])
     refresh_token = create_refresh_token(data={"sub": user_id_str})
     # save refresh token in db
     await user_collection.update_one(
-        {"email": logindata.username}, {"$set": {"refresh_token": refresh_token}}
+        {"_id": user["_id"]}, {"$set": {"refresh_token": hash_token(refresh_token)}}
     )
     response = JSONResponse(
-        content={"message": "Login successful", "access_token": access_token, "token_type": "bearer"}
+        content={
+            "message": "Login successful",
+            "access_token": access_token,
+            "token_type": "bearer",
+        }
     )
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True)
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
     return response
 
 
@@ -95,12 +114,17 @@ async def logout_user(refresh_token: str = Cookie(None)):
     user_col = await get_user_collection()
 
     decoded = decode_refresh_token(refresh_token)
-    email = decoded["sub"]
+    user_id = decoded["sub"]
 
     # remove refresh token
-    await user_col.update_one({"email": email}, {"$unset": {"refresh_token": ""}})
+    await user_col.update_one(
+        {"_id": _user_object_id(user_id), "refresh_token": hash_token(refresh_token)},
+        {"$unset": {"refresh_token": ""}},
+    )
 
-    return {"message": "Logged out successfully"}
+    response = JSONResponse(content={"message": "Logged out successfully"})
+    response.delete_cookie(key="refresh_token")
+    return response
 
 
 ############################## Refresh Token ############################
@@ -111,23 +135,35 @@ async def refresh(refresh_token: str = Cookie(None)):
     user_col = await get_user_collection()
 
     decoded = decode_refresh_token(refresh_token)
-    email = decoded["sub"]
+    user_id = decoded["sub"]
 
-    user = await user_col.find_one({"email": email})
+    user = await user_col.find_one({"_id": _user_object_id(user_id)})
 
-    if not user or user.get("refresh_token") != refresh_token:
+    if not user or user.get("refresh_token") != hash_token(refresh_token):
         raise HTTPException(401, "Invalid refresh token")
 
-    new_access = create_access_token({"sub": email})
-    new_refresh = create_refresh_token({"sub": email})
+    new_access = create_access_token({"sub": user_id})
+    new_refresh = create_refresh_token({"sub": user_id})
 
     # update refresh token
     await user_col.update_one(
-        {"email": email}, {"$set": {"refresh_token": new_refresh}}
+        {"_id": _user_object_id(user_id)},
+        {"$set": {"refresh_token": hash_token(new_refresh)}},
     )
-    response = JSONResponse(content={"message": "Token refreshed successfully"})
-    response.set_cookie(key="access_token", value=new_access, httponly=True)
-    response.set_cookie(key="refresh_token", value=new_refresh, httponly=True)
+    response = JSONResponse(
+        content={
+            "message": "Token refreshed successfully",
+            "access_token": new_access,
+            "token_type": "bearer",
+        }
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=new_refresh,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="lax",
+    )
     return response
 
 
