@@ -49,19 +49,37 @@ async def calculate_and_create_project(
     }
 
 
-@router.get("/", summary="List current user's projects")
+@router.get("/")
 async def list_projects(
-    limit: int = 20,
+    limit: int = 10,
     skip: int = 0,
     current_user: userOut = Depends(get_current_user),
     project_col=Depends(get_project_collection),
 ):
-    cursor = project_col.find({"user_id": current_user.id}).skip(skip).limit(limit)
+    total = await project_col.count_documents(
+        {"user_id": current_user.id}
+    )
+
+    cursor = (
+        project_col.find(
+            {"user_id": current_user.id}
+        )
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+
     projects = []
+
     async for doc in cursor:
         projects.append(objid_to_str(doc))
-    return projects
 
+    return {
+    "total": total,
+    "limit": limit,
+    "skip": skip,
+    "projects": projects,
+}
 
 @router.get("/user/{user_id}", summary="List projects by user")
 async def list_projects_by_user(
