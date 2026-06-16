@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime,timezone
 from typing import Literal, Optional
 
 
@@ -37,15 +37,25 @@ class CostLineItem(BaseModel):
     selected_product: ProductOffer | None = None
 
 
+# class CostEstimate(BaseModel):
+#     source: Literal["serpapi_google_shopping", "unavailable"]
+#     currency: str = "INR"
+#     total: float
+#     line_items: list[CostLineItem] = Field(default_factory=list)
+#     products: list[ProductOffer] = Field(default_factory=list)
+#     notes: list[str] = Field(default_factory=list)
+#     generated_at: datetime = Field(default_factory=datetime.utcnow)
 class CostEstimate(BaseModel):
-    source: Literal["serpapi_google_shopping", "unavailable"]
+    # 1. Added "skipped" to prevent the Pydantic Literal ValidationError
+    source: Literal["serpapi_google_shopping", "unavailable", "skipped"]
     currency: str = "INR"
     total: float
     line_items: list[CostLineItem] = Field(default_factory=list)
     products: list[ProductOffer] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
-
+    
+    # 2. Modernized to timezone-aware UTC datetime to eliminate python deprecation warnings
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class HarvestResult(BaseModel):
     feasible: bool
