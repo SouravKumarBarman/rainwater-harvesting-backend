@@ -15,7 +15,7 @@ async def average_rainfall(
     Uses the free Open-Meteo Archive API.
     """
     try:
-        result = await get_average_rainfall(latitude, longitude, 5)
+        result = await get_average_rainfall(latitude, longitude, 3)
         return JSONResponse(content=result, status_code=200)
     except HTTPException:
         raise
